@@ -1,7 +1,7 @@
 # TextArea Application using PyQt6
 # This application provides a simple TextArea with customizable themes and fonts.
 # Author: Rise-KuN
-# Version: 1.1.0
+# Version: 1.1.1
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QTextEdit, QToolBar, 
@@ -37,6 +37,7 @@ class TextAreaApp(QMainWindow):
         self.theme_mode = "Dark"
         self.text_content = ""
         self.show_debug = False
+        self.always_on_top = False
         
         # Load settings
         self.load_settings()
@@ -60,6 +61,9 @@ class TextAreaApp(QMainWindow):
         
         # Set text content
         self.text_area.setPlainText(self.text_content)
+
+        # Apply always on top setting immediately
+        self.set_always_on_top(self.always_on_top)        
 
     def _init_debug_console(self):
         """Initialize debug console"""
@@ -101,6 +105,7 @@ class TextAreaApp(QMainWindow):
                 """)
                 
             self.debug_dock = QDockWidget("Debug Console", self)
+            self.debug_dock.setObjectName("debug_console_dock")
             self.debug_dock.setWidget(self.debug_console)
             self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.debug_dock)
             self.debug_dock.setVisible(self.show_debug)
@@ -160,6 +165,7 @@ class TextAreaApp(QMainWindow):
         
         # Create toolbar
         self.toolbar = QToolBar()
+        self.toolbar.setObjectName("main_app_toolbar")
         self.toolbar.setMovable(False)
         self.addToolBar(self.toolbar)
         
@@ -178,6 +184,25 @@ class TextAreaApp(QMainWindow):
         self.text_area.setFrameShape(QFrame.Shape.NoFrame)
         self.text_area.setWordWrapMode(QTextOption.WrapMode.WordWrap)
         layout.addWidget(self.text_area)
+
+    def set_always_on_top(self, enable):
+            """Toggle the Always On Top state for the main window"""
+            self.always_on_top = enable
+            
+            # Get current window flags
+            flags = self.windowFlags()
+            
+            if enable:
+                # Set the flag to keep the window on top
+                self.setWindowFlags(flags | Qt.WindowType.WindowStaysOnTopHint)
+                self.log_debug("Always On Top: Enabled")
+            else:
+                # Clear the flag
+                self.setWindowFlags(flags & ~Qt.WindowType.WindowStaysOnTopHint)
+                self.log_debug("Always On Top: Disabled")
+            
+            # Must call show() again to apply the new flags
+            self.show()
     
     def apply_theme(self, theme=None):
         if theme is not None:
@@ -386,14 +411,19 @@ class TextAreaApp(QMainWindow):
         
         notebook = QTabWidget()
         layout.addWidget(notebook)
+
+        # General tab
+        general_tab = QWidget()
+        notebook.addTab(general_tab, "General")
+        general_layout = QVBoxLayout(general_tab)
+        general_layout.setContentsMargins(5, 5, 5, 5)
+        general_layout.setSpacing(10)
         
         # Themes tab
-        themes_tab = QWidget()
-        notebook.addTab(themes_tab, "Themes")
-        
-        themes_layout = QVBoxLayout(themes_tab)
-        themes_layout.setContentsMargins(5, 5, 5, 5)
-        themes_layout.setSpacing(10)
+        theme_group = QGroupBox("Theme")
+        theme_group_layout = QVBoxLayout()
+        theme_group_layout.setContentsMargins(10, 15, 10, 10)
+        theme_group_layout.setSpacing(5)
         
         # Theme selection in a group box
         theme_group = QGroupBox("Theme")
@@ -413,8 +443,7 @@ class TextAreaApp(QMainWindow):
         theme_group_layout.addWidget(light_radio)
         theme_group.setLayout(theme_group_layout)
         
-        themes_layout.addWidget(theme_group)
-        themes_layout.addStretch()
+        general_layout.addWidget(theme_group)
         
         # Set current selection
         if self.theme_mode == "Dark":
@@ -424,6 +453,21 @@ class TextAreaApp(QMainWindow):
         else:
             dark_radio.setChecked(True)
             self.log_debug(f"Unknown Theme '{self.theme_mode}' set, Defaulting To Dark Theme")
+
+        # Always On Top Group
+        aot_group = QGroupBox("Window Settings")
+        aot_group_layout = QVBoxLayout()
+        aot_group_layout.setContentsMargins(10, 15, 10, 10)
+        aot_group_layout.setSpacing(5)
+        
+        self.aot_checkbox = QCheckBox("Keep window always on top")
+        self.aot_checkbox.setChecked(self.always_on_top)
+        aot_group_layout.addWidget(self.aot_checkbox)
+        
+        aot_group.setLayout(aot_group_layout)
+        general_layout.addWidget(aot_group)
+        
+        general_layout.addStretch()
         
         # Fonts tab
         fonts_tab = QWidget()
@@ -583,6 +627,14 @@ class TextAreaApp(QMainWindow):
             self.log_debug(f"Font-Size Changed From {old_size} To {self.font_size}")
         if old_weight != self.font_weight:
             self.log_debug(f"Font-Weight Changed From {old_weight} To {self.font_weight}")
+
+        # Get Always On Top setting
+        new_aot_setting = self.aot_checkbox.isChecked()
+        aot_setting_changed = (new_aot_setting != self.always_on_top)
+
+        if aot_setting_changed:
+            self.set_always_on_top(new_aot_setting)
+            self.log_debug(f"Always On Top setting changed to: {self.always_on_top}")
         
         # Get debug setting
         new_debug_setting = self.debug_checkbox.isChecked()
@@ -641,12 +693,13 @@ class TextAreaApp(QMainWindow):
         settings = QSettings("TextArea", "Settings")
         settings.setValue("font_name", self.font_name)
         settings.setValue("font_size", self.font_size)
+        settings.setValue("font_weight", self.font_weight)
         settings.setValue("theme_mode", self.theme_mode)
         settings.setValue("text_content", self.text_area.toPlainText())
         settings.setValue("window_geometry", self.saveGeometry())
         settings.setValue("window_state", self.saveState())
         settings.setValue("show_debug", self.show_debug)
-        settings.setValue("font_weight", self.font_weight)
+        settings.setValue("always_on_top", self.always_on_top)
         if hasattr(self, 'settings_dialog_geometry'):
             settings.setValue("settings_dialog_geometry", self.settings_dialog_geometry)
     
@@ -661,8 +714,11 @@ class TextAreaApp(QMainWindow):
         self.show_debug = settings.value("show_debug", "false") == "true"
         self.font_weight = int(settings.value("font_weight", QFont.Weight.Normal))
         self.settings_dialog_geometry = settings.value("settings_dialog_geometry")
+        self.always_on_top = settings.value("always_on_top", "false") == "true"
 
-        self.log_debug(f"Loaded settings - Theme: {self.theme_mode}, Debug: {self.show_debug}")
+        self.log_debug(f"Loaded settings - Debug: {self.show_debug}")
+        self.log_debug(f"Loaded settings - Always On Top: {self.always_on_top}")
+        self.log_debug(f"Loaded settings - Theme: {self.theme_mode}")
         self.log_debug(f"Loaded settings - Font-Family: {self.font_name}, Font-Size: {self.font_size}")
         self.log_debug(f"Loaded settings - Font-Weight: {self.font_weight}")
         
